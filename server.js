@@ -5,6 +5,20 @@ import multer from 'multer';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
+// Configure multer for file uploads
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    cb(null, 'uploads/');
+  },
+  filename: (req, file, cb) => {
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    cb(null, uniqueSuffix + path.extname(file.originalname));
+  }
+});
+
 const upload = multer({ storage: storage });
 
 const app = express();
@@ -38,20 +52,6 @@ app.post('/chat', async (req, res) => {
   if (!image) return res.status(400).send('No image provided');
   const result = await main(image);
   res.json({message: result});
-});
-
-// Configure multer for file uploads
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    cb(null, 'uploads/');
-  },
-  filename: (req, file, cb) => {
-    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-    cb(null, uniqueSuffix + path.extname(file.originalname));
-  }
 });
 
 app.listen(port, () => {
