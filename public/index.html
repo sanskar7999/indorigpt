@@ -8,25 +8,36 @@
 </head>
 <body>
     <div class="chat-container">
-        <div class="chat-header">
+        <header class="chat-header">
             <h1>🤖 AI Image Chatbot</h1>
-            <p>Upload an image and I'll describe what I see!</p>
-        </div>
+            <p>Upload up to 5 images and I'll describe what I see!</p>
+        </header>
         
-        <div class="chat-messages" id="chatMessages">
+        <main class="chat-messages" id="chatMessages">
             <div class="welcome-message">
                 <h2>Welcome to AI Image Chatbot!</h2>
-                <p>👉 Click the camera icon to upload an image</p>
-                <p>👀 I'll analyze your image and tell you what I see</p>
-                <p>💬 Ask me anything about the image after uploading</p>
+                <p>👉 Click the camera icon to upload up to 5 images</p>
+                <p>👀 I'll analyze your images and tell you what I see</p>
+                <p>💬 Ask me anything about the images after uploading</p>
             </div>
-        </div>
+        </main>
         
-        <div class="chat-input">
-            <input type="file" id="imageInput" accept="image/*">
-            <button class="image-upload-btn" id="uploadBtn">📷</button>
-            <button class="send-btn" id="sendBtn" disabled>➤</button>
-        </div>
+        <footer class="chat-input">
+            <div class="preview-area" id="previewArea"></div>
+            <div class="input-area">
+                <input type="file" id="imageInput" accept="image/*" multiple aria-label="Select up to 5 images to upload">
+                <button class="image-upload-btn" id="uploadBtn" aria-label="Upload images">📷</button>
+                <input type="text" id="userInput" placeholder="Type a message..." aria-label="Enter your message">
+                <button class="send-btn" id="sendBtn" disabled aria-label="Send message">➤</button>
+            </div>
+        </footer>
+    </div>
+
+    <!-- Modal for enlarged image view -->
+    <div id="imageModal" class="modal">
+        <span class="close">&times;</span>
+        <img class="modal-content" id="enlargedImage">
+        <div id="modalCaption"></div>
     </div>
 
     <script src="script.js"></script>

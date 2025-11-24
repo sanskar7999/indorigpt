@@ -33,24 +33,35 @@ app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
-app.post('/upload', upload.single('image'), (req, res) => {
-  if (!req.file) {
-    return res.status(400).json({ error: 'No file uploaded' });
+// Updated to handle multiple file uploads
+app.post('/upload', upload.array('images', 5), (req, res) => {
+  if (!req.files || req.files.length === 0) {
+    return res.status(400).json({ error: 'No files uploaded' });
   }
   
-  // Return the file path so the frontend can use it
+  // Return the file paths so the frontend can use them
+  const filePaths = req.files.map(file => file.path);
+  const fileNames = req.files.map(file => file.filename);
+  
   res.json({ 
-    message: 'File uploaded successfully',
-    filePath: req.file.path,
-    fileName: req.file.filename
+    message: 'Files uploaded successfully',
+    filePaths: filePaths,
+    fileNames: fileNames
   });
 });
 
+// Updated to handle multiple images
 app.post('/chat', async (req, res) => {
-  const image = req.body.image;
-  console.log(`Image: ${JSON.stringify(req.body)}`);
-  if (!image) return res.status(400).send('No image provided');
-  const result = await main(image);
+  const imagePaths = req.body.images; // Now expecting an array of image paths
+  const message = req.body.message;
+
+  if (!imagePaths || !Array.isArray(imagePaths) || imagePaths.length === 0) {
+    return res.status(400).send('No images provided');
+  }
+  
+  // For now, we'll use the first image for analysis
+  // In a more advanced implementation, you might want to analyze all images
+  const result = await main(imagePaths, message);
   res.json({message: result});
 });
 
