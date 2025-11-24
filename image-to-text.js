@@ -1,18 +1,12 @@
 import { Groq } from 'groq-sdk';
 import 'dotenv/config';
-import fs from 'fs';
 import { WebClient } from '@slack/web-api';
 import {validateImages} from './image-validater.js';
+import sharp from 'sharp';
 
 const groq = new Groq();
 
 const slackClient = new WebClient(process.env.SLACK_BOT_TOKEN);
-
-
-async function encodeImageToBase64(imagePath) {
-  const imageBuffer = fs.readFileSync(imagePath);
-  return imageBuffer.toString('base64');
-}
 
 async function buildMessages(message, imagePaths) {
   const messages = [
@@ -22,16 +16,25 @@ async function buildMessages(message, imagePaths) {
     }
   ];
 
-  for (const imagePath of imagePaths) {
-    const base64Image = await encodeImageToBase64(imagePath);
+  const encodedImages = await Promise.all(
+    imagePaths.map(async (imagePath) => {
+      const buffer = await sharp(imagePath)
+        .resize({ width: 800 })
+        .jpeg({ quality: 60 })
+        .toBuffer();
 
+      return buffer.toString("base64");
+    })
+  );
+  encodedImages.forEach((encodedImage) => {
     messages.push({
       type: "image_url",
       image_url: {
-        url: `data:image/jpeg;base64,${base64Image}`
+        url: `data:image/jpeg;base64,${encodedImage}`
       }
     });
-  }
+  });
+
   try {
     await validateImages(imagePaths);
 
@@ -40,13 +43,11 @@ async function buildMessages(message, imagePaths) {
     console.error("Validation failed:", err.message);
   }
 
-  return messages; // <-- correct!
+  return messages;
 }
-
 
 export async function main(imagePaths, message) {
   const messages = await buildMessages(message, imagePaths);
-  // return messages;
 
 // create a welcome message and post this with image on slack channel id C09TYUAS7J7
 // Please one image from the list and write a breif description about that image and send it to slack channel id C09TYUAS7J7
@@ -67,7 +68,7 @@ export async function main(imagePaths, message) {
                 },
                 "channel": {
                   "type": "string",
-                  "description": "The Slack channel id to upload the image to."
+                  "description": "The Slack channel name where the image should be uploaded."
                 },
                 "context": {
                   "type": "string",
@@ -102,13 +103,23 @@ export async function main(imagePaths, message) {
 }
 
 async function slack_image_upload({image_url, channel, context}) {
+  
+  // Find the channel by name
+  const channelList = await slackClient.conversations.list({
+    exclude_archived: true
+  });
+  
+  const channelData = channelList.channels.find(c => c.name === channel);
+
+  if (!channelData) {
+    return `Channel #${channel} not found.`;
+  }
   const response = await slackClient.filesUploadV2({
-    channel_id: channel,
+    channel_id: channelData.id,
     initial_comment: context,
     file: image_url,
     filename: image_url
   });
-  console.log(response);
 
   if (response.ok) {
     return "data uploaded successfully";
