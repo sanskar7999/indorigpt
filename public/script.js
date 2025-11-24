@@ -19,6 +19,7 @@ const closeBtn = document.querySelector('.close');
 let uploadedImagePaths = []; // Changed from single path to array
 let uploadedImageNames = []; // Changed from single name to array
 let fullImageDataUrls = []; // Store multiple full image data URLs for modal viewing
+let originalFiles = []; // Store original File objects for re-uploading
 
 // Initialize the application
 function initApp() {
@@ -69,33 +70,44 @@ async function handleImageUpload(event) {
     const files = event.target.files;
     if (!files || files.length === 0) return;
     
-    // Limit to 5 files
-    const filesToProcess = Array.from(files).slice(0, 5);
+    // Limit to 5 files total
+    const currentFileCount = fullImageDataUrls.length;
+    const maxFilesToAdd = 5 - currentFileCount;
     
-    // Clear previous previews and state
-    clearPreviousPreview();
-    uploadedImagePaths = [];
-    uploadedImageNames = [];
-    fullImageDataUrls = [];
+    // If we've already reached the limit, don't add more
+    if (maxFilesToAdd <= 0) {
+        showError("You can only upload up to 5 images.");
+        // Clear the input to prevent confusion
+        imageInput.value = '';
+        return;
+    }
+    
+    // Limit new files to add
+    const filesToProcess = Array.from(files).slice(0, maxFilesToAdd);
+    
+    // Don't clear previous previews and state
+    // Instead, we'll add to existing previews
     
     // Process each file
     for (const file of filesToProcess) {
+        // Store the original file for potential re-upload
+        originalFiles.push(file);
         // Show preview for each file
         showImagePreview(file);
     }
     
-    // Upload all files to server
-    await uploadImagesToServer(filesToProcess);
+    // Upload all current files to server
+    await uploadAllCurrentFiles();
 }
 
-// Upload images to server
-async function uploadImagesToServer(files) {
+// Upload all current files to server
+async function uploadAllCurrentFiles() {
     try {
         const formData = new FormData();
         
-        // Append all files to form data
-        files.forEach((file, index) => {
-            formData.append('images', file); // Note: using 'images' instead of 'image'
+        // Append all current files to form data
+        originalFiles.forEach((file) => {
+            formData.append('images', file);
         });
         
         const response = await fetch(`${baseURL}/upload`, {
@@ -152,8 +164,11 @@ function showImagePreview(file) {
         
         // Add remove button for each image
         const removeBtn = createRemoveButton();
-        // Modify remove button to remove only this specific image
-        removeBtn.addEventListener('click', function() {
+        // Add click event to remove only this specific image
+        removeBtn.addEventListener('click', function(event) {
+            // Prevent the event from bubbling up
+            event.stopPropagation();
+            
             // Find the index of this image in our arrays
             const index = fullImageDataUrls.indexOf(imageDataUrl);
             if (index !== -1) {
@@ -164,6 +179,7 @@ function showImagePreview(file) {
                 fullImageDataUrls.splice(index, 1);
                 uploadedImagePaths.splice(index, 1);
                 uploadedImageNames.splice(index, 1);
+                originalFiles.splice(index, 1); // Also remove the original file
                 
                 // Disable send button if no images left
                 if (fullImageDataUrls.length === 0) {
@@ -225,7 +241,8 @@ function createRemoveButton() {
     removeBtn.className = 'remove-btn';
     removeBtn.innerHTML = '×';
     removeBtn.setAttribute('aria-label', 'Remove image');
-    removeBtn.addEventListener('click', removeImage);
+    // Don't add the general removeImage listener here
+    // Each specific image will add its own listener in showImagePreview
     return removeBtn;
 }
 
@@ -238,6 +255,7 @@ function removeImage() {
     uploadedImagePaths = [];
     uploadedImageNames = [];
     fullImageDataUrls = [];
+    originalFiles = []; // Clear the original files array
     sendBtn.disabled = true;
 }
 

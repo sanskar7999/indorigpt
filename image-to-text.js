@@ -49,8 +49,6 @@ async function buildMessages(message, imagePaths) {
 export async function main(imagePaths, message) {
   const messages = await buildMessages(message, imagePaths);
 
-// create a welcome message and post this with image on slack channel id C09TYUAS7J7
-// Please one image from the list and write a breif description about that image and send it to slack channel id C09TYUAS7J7
   const chatCompletion = await groq.chat.completions.create({
     "messages": [{"role": "user", "content": messages}],
     "tools": [
