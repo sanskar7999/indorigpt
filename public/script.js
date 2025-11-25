@@ -3,7 +3,7 @@ const baseURL = window.location.origin;
 
 // DOM Elements
 const chatMessages = document.getElementById('chatMessages');
-const previewArea = document.getElementById('previewArea'); // Changed from uploadedImagePreview
+const previewArea = document.getElementById('previewArea');
 const imageInput = document.getElementById('imageInput');
 const userInput = document.getElementById('userInput');
 const uploadBtn = document.getElementById('uploadBtn');
@@ -16,10 +16,10 @@ const modalCaption = document.getElementById('modalCaption');
 const closeBtn = document.querySelector('.close');
 
 // State
-let uploadedImagePaths = []; // Changed from single path to array
-let uploadedImageNames = []; // Changed from single name to array
-let fullImageDataUrls = []; // Store multiple full image data URLs for modal viewing
-let originalFiles = []; // Store original File objects for re-uploading
+let uploadedImagePaths = [];
+let uploadedImageNames = [];
+let fullImageDataUrls = [];
+let originalFiles = [];
 
 // Initialize the application
 function initApp() {
@@ -29,10 +29,7 @@ function initApp() {
 
 // Set up main event listeners
 function setupEventListeners() {
-    uploadBtn.addEventListener('click', () => {
-        imageInput.click();
-    });
-
+    uploadBtn.addEventListener('click', () => imageInput.click());
     imageInput.addEventListener('change', handleImageUpload);
     userInput.addEventListener('keypress', handleKeyPress);
     sendBtn.addEventListener('click', sendMessage);
@@ -42,7 +39,6 @@ function setupEventListeners() {
 function setupModalEventListeners() {
     closeBtn.addEventListener('click', closeModal);
     window.addEventListener('click', handleWindowClick);
-    // Make modal content clickable to close
     enlargedImage.addEventListener('click', closeModal);
 }
 
@@ -77,7 +73,6 @@ async function handleImageUpload(event) {
     // If we've already reached the limit, don't add more
     if (maxFilesToAdd <= 0) {
         showError("You can only upload up to 5 images.");
-        // Clear the input to prevent confusion
         imageInput.value = '';
         return;
     }
@@ -85,29 +80,48 @@ async function handleImageUpload(event) {
     // Limit new files to add
     const filesToProcess = Array.from(files).slice(0, maxFilesToAdd);
     
-    // Don't clear previous previews and state
-    // Instead, we'll add to existing previews
+    // Update originalFiles array
+    const newOriginalFiles = [];
+    const previewContainers = document.querySelectorAll('.preview-container');
     
-    // Process each file
+    // Add existing files from current previews
+    previewContainers.forEach(container => {
+        if (container.fileObject) {
+            newOriginalFiles.push(container.fileObject);
+        }
+    });
+    
+    // Add new files
+    filesToProcess.forEach(file => newOriginalFiles.push(file));
+    originalFiles = newOriginalFiles;
+    
+    // Process each new file for preview
     for (const file of filesToProcess) {
-        // Store the original file for potential re-upload
-        originalFiles.push(file);
-        // Show preview for each file
         showImagePreview(file);
     }
     
     // Upload all current files to server
     await uploadAllCurrentFiles();
+    
+    // Clear the input value
+    imageInput.value = '';
 }
 
 // Upload all current files to server
 async function uploadAllCurrentFiles() {
     try {
+        // Only upload if we have files
+        if (originalFiles.length === 0) {
+            sendBtn.disabled = true;
+            return;
+        }
+        
         const formData = new FormData();
         
         // Append all current files to form data
-        originalFiles.forEach((file) => {
+        originalFiles.forEach((file, index) => {
             formData.append('images', file);
+            console.log(`Appending file ${index}:`, file.name);
         });
         
         const response = await fetch(`${baseURL}/upload`, {
@@ -117,18 +131,18 @@ async function uploadAllCurrentFiles() {
         
         // Check if response is OK
         if (!response.ok) {
-            throw new Error(`HTTP error! Status: ${response.status}`);
+            const errorText = await response.text();
+            console.error('Server response error:', errorText);
+            throw new Error(`HTTP error! Status: ${response.status}, Message: ${errorText}`);
         }
         
-        // Try to parse JSON
         const result = await response.json();
         
         // Store the paths and names
         uploadedImagePaths = result.filePaths || [];
         uploadedImageNames = result.fileNames || [];
-        sendBtn.disabled = false; // Enable the send button when new images are uploaded
-        sendBtn.innerHTML = '➤'; // Restore the send button icon
-        
+        sendBtn.disabled = false;
+        sendBtn.innerHTML = '➤';
     } catch (error) {
         console.error('Upload error:', error);
         showError(`Error uploading images: ${error.message}. Please make sure you're accessing this page through http://localhost:3000`);
@@ -140,19 +154,20 @@ function showImagePreview(file) {
     // Create preview container for each image
     const previewContainer = document.createElement('div');
     previewContainer.className = 'preview-container';
+    previewContainer.fileObject = file;
     
     // Create image preview
     const reader = new FileReader();
     reader.onload = function(e) {
         const imageDataUrl = e.target.result;
-        fullImageDataUrls.push(imageDataUrl); // Store full image data for modal
+        fullImageDataUrls.push(imageDataUrl);
         
         const img = document.createElement('img');
         img.src = imageDataUrl;
         img.className = 'preview-image';
         img.alt = 'Preview of uploaded image';
         
-        // Add click event to show enlarged image (pass index for reference)
+        // Add click event to show enlarged image
         const currentIndex = fullImageDataUrls.length - 1;
         img.addEventListener('click', () => showEnlargedImage(currentIndex, file.name));
         
@@ -162,58 +177,44 @@ function showImagePreview(file) {
         const infoDiv = createFileInfoDiv(file);
         previewContainer.appendChild(infoDiv);
         
-        // Add remove button for each image
+        // Add remove button
         const removeBtn = createRemoveButton();
-        // Add click event to remove only this specific image
-        removeBtn.addEventListener('click', function(event) {
-            // Prevent the event from bubbling up
+        removeBtn.addEventListener('click', (event) => {
             event.stopPropagation();
-            
-            // Find the index of this image in our arrays
-            const index = fullImageDataUrls.indexOf(imageDataUrl);
-            if (index !== -1) {
-                // Remove this specific preview
-                previewContainer.remove();
-                
-                // Remove the corresponding data from our arrays
-                fullImageDataUrls.splice(index, 1);
-                uploadedImagePaths.splice(index, 1);
-                uploadedImageNames.splice(index, 1);
-                originalFiles.splice(index, 1); // Also remove the original file
-                
-                // Disable send button if no images left
-                if (fullImageDataUrls.length === 0) {
-                    sendBtn.disabled = true;
-                }
-            }
+            removeImageAtIndex(currentIndex);
         });
         previewContainer.appendChild(removeBtn);
         
         // Add to preview area
         previewArea.appendChild(previewContainer);
-        previewArea.scrollLeft = previewArea.scrollWidth; // Auto-scroll to show new preview
+        previewArea.scrollLeft = previewArea.scrollWidth;
     };
     reader.readAsDataURL(file);
 }
 
-// Clear previous preview
-function clearPreviousPreview() {
-    const existingPreviews = document.querySelectorAll('.preview-container');
-    existingPreviews.forEach(preview => preview.remove());
-}
-
-// Show enlarged image in modal
-function showEnlargedImage(index, fileName) {
-    // Prevent event from propagating to parent elements
-    event.stopPropagation();
+// Remove image at specific index
+function removeImageAtIndex(index) {
+    // Find and remove the preview container
+    const previewContainers = document.querySelectorAll('.preview-container');
+    if (previewContainers[index]) {
+        previewContainers[index].remove();
+    }
     
-    // Get the image source from the clicked element
-    const imgSrc = fullImageDataUrls[index];
+    // Remove the corresponding data from our arrays
+    fullImageDataUrls.splice(index, 1);
+    uploadedImagePaths.splice(index, 1);
+    uploadedImageNames.splice(index, 1);
+    originalFiles.splice(index, 1);
     
-    enlargedImage.src = imgSrc;
-    // Use the file name if available, otherwise use the uploaded image name
-    modalCaption.innerHTML = fileName || uploadedImageNames[index] || 'Uploaded Image';
-    modal.style.display = 'block';
+    // Disable send button if no images left
+    if (fullImageDataUrls.length === 0) {
+        sendBtn.disabled = true;
+    }
+    
+    // Re-upload the remaining files to sync with the server
+    if (originalFiles.length > 0) {
+        uploadAllCurrentFiles();
+    }
 }
 
 // Create file info div
@@ -241,22 +242,7 @@ function createRemoveButton() {
     removeBtn.className = 'remove-btn';
     removeBtn.innerHTML = '×';
     removeBtn.setAttribute('aria-label', 'Remove image');
-    // Don't add the general removeImage listener here
-    // Each specific image will add its own listener in showImagePreview
     return removeBtn;
-}
-
-// Remove image
-function removeImage() {
-    const previewContainers = document.querySelectorAll('.preview-container');
-    previewContainers.forEach(container => container.remove());
-    
-    imageInput.value = '';
-    uploadedImagePaths = [];
-    uploadedImageNames = [];
-    fullImageDataUrls = [];
-    originalFiles = []; // Clear the original files array
-    sendBtn.disabled = true;
 }
 
 // Format file size
@@ -273,13 +259,13 @@ async function sendMessage() {
     const message = userInput.value.trim() || "What's in these images?";
     if (uploadedImagePaths.length === 0) return;
 
-    // Add user message to chat (with image previews)
+    // Add user message to chat
     addUserMessage(message);
-    userInput.value = '';   // Clear the input 
+    userInput.value = '';
     
     // Disable the send button to prevent multiple submissions
     sendBtn.disabled = true;
-    sendBtn.innerHTML = '⏳'; // Change button to show loading state
+    sendBtn.innerHTML = '⏳';
     
     // Show typing indicator
     const typingIndicator = showTypingIndicator();
@@ -291,7 +277,7 @@ async function sendMessage() {
                 'Content-Type': 'application/json'
             },
             body: JSON.stringify({ 
-                images: uploadedImagePaths, // Sending array of image paths
+                images: uploadedImagePaths,
                 message: message
             })
         });
@@ -304,27 +290,19 @@ async function sendMessage() {
             throw new Error(`HTTP error! Status: ${response.status}`);
         }
         
-        // Parse JSON response
         const result = await response.json();
-        
         addBotMessage(result.message);
         
         // Remove image previews after sending
         removeImagePreview();
         
         // Reset state
-        uploadedImagePaths = [];
-        uploadedImageNames = [];
-        fullImageDataUrls = [];
-        sendBtn.disabled = true;
-        sendBtn.innerHTML = '➤';
+        resetState();
     } catch (error) {
         // Remove typing indicator
         typingIndicator.remove();
         console.error('Chat error:', error);
         showError(`Error communicating with AI: ${error.message}. Please make sure you're accessing this page through http://localhost:3000`);
-        
-        // Change button icon back to arrow but keep it disabled
         sendBtn.innerHTML = '➤';
     }
 }
@@ -334,6 +312,16 @@ function removeImagePreview() {
     const previewContainers = document.querySelectorAll('.preview-container');
     previewContainers.forEach(container => container.remove());
     imageInput.value = '';
+}
+
+// Reset application state
+function resetState() {
+    uploadedImagePaths = [];
+    uploadedImageNames = [];
+    fullImageDataUrls = [];
+    originalFiles = [];
+    sendBtn.disabled = true;
+    sendBtn.innerHTML = '➤';
 }
 
 // Add user message to chat
@@ -352,8 +340,6 @@ function addUserMessage(text) {
         img.src = imageUrl;
         img.className = 'message-image';
         img.alt = 'Uploaded image';
-        // Add click event to show enlarged image
-        // Pass the image data directly instead of an index
         img.addEventListener('click', () => showEnlargedImageFromData(imageUrl));
         messageDiv.appendChild(img);
     });
@@ -362,11 +348,17 @@ function addUserMessage(text) {
     chatMessages.scrollTop = chatMessages.scrollHeight;
 }
 
+// Show enlarged image in modal
+function showEnlargedImage(index, fileName) {
+    event.stopPropagation();
+    enlargedImage.src = fullImageDataUrls[index];
+    modalCaption.innerHTML = fileName || uploadedImageNames[index] || 'Uploaded Image';
+    modal.style.display = 'block';
+}
+
 // Show enlarged image in modal directly from image data
 function showEnlargedImageFromData(imageDataUrl) {
-    // Prevent event from propagating to parent elements
     event.stopPropagation();
-    
     enlargedImage.src = imageDataUrl;
     modalCaption.innerHTML = 'Uploaded Image';
     modal.style.display = 'block';

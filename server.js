@@ -1,4 +1,4 @@
-import {main} from './image-to-text.js';
+import { main } from './image-to-text.js';
 import express from 'express';
 import cors from 'cors';
 import multer from 'multer';
@@ -19,7 +19,14 @@ const storage = multer.diskStorage({
   }
 });
 
-const upload = multer({ storage: storage });
+// More explicit multer configuration
+const upload = multer({ 
+  storage: storage,
+  limits: {
+    fileSize: 10 * 1024 * 1024, // 10 MB limit
+    files: 5 // Maximum 5 files
+  }
+});
 
 const app = express();
 app.use(cors());
@@ -33,8 +40,13 @@ app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
-// Updated to handle multiple file uploads
+// Handle multiple file uploads
 app.post('/upload', upload.array('images', 5), (req, res) => {
+  // Debug: Log what Multer received
+  console.log('Multer received files:', req.files);
+  console.log('Multer received body:', req.body);
+  console.log('Multer received fields:', Object.keys(req.body));
+  
   if (!req.files || req.files.length === 0) {
     return res.status(400).json({ error: 'No files uploaded' });
   }
@@ -50,7 +62,7 @@ app.post('/upload', upload.array('images', 5), (req, res) => {
   });
 });
 
-// Updated to handle multiple images
+// Handle chat requests with multiple images
 app.post('/chat', async (req, res) => {
   const imagePaths = req.body.images; // Now expecting an array of image paths
   const message = req.body.message;
@@ -59,10 +71,13 @@ app.post('/chat', async (req, res) => {
     return res.status(400).send('No images provided');
   }
   
-  // For now, we'll use the first image for analysis
-  // In a more advanced implementation, you might want to analyze all images
-  const result = await main(imagePaths, message);
-  res.json({message: result});
+  try {
+    const result = await main(imagePaths, message);
+    res.json({ message: result });
+  } catch (error) {
+    console.error('Error processing chat request:', error);
+    res.status(500).json({ error: 'Failed to process request' });
+  }
 });
 
 app.listen(port, () => {
